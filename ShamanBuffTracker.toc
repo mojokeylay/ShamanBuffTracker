@@ -1,0 +1,9 @@
+## Interface: 120005,120001
+## Title: ShamanBuffTracker
+## Notes: An addon that alerts the user when tracked shaman buffs are not active. This helps with the many weapon imbues or shields to track are not active, making sure you always have them enabled for every fight.
+## Author: mojokeylay
+## Version: 1.0
+## SavedVariables: ShamanBuffTrackerDB
+## IconTexture: 626006
+
+ShamanBuffTracker.lua
