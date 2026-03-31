@@ -16,7 +16,6 @@ StaticPopupDialogs["SHAMAN_TRACKER_CONFIRM_RESET"] = {
     button1 = "Yes",
     button2 = "No",
     OnAccept = function()
-        -- Reset Logic moved here
         ShamanBuffTrackerDB.posX = 0
         ShamanBuffTrackerDB.posY = -50
         ShamanBuffTrackerDB.point = "TOP"
@@ -27,8 +26,10 @@ StaticPopupDialogs["SHAMAN_TRACKER_CONFIRM_RESET"] = {
         ShamanSelfCheckFrame:SetUserPlaced(false)
         ShamanSelfCheckFrame:SetScale(1.0)
         
-        ShamanTrackerScaleSlider:SetValue(1.0)
-        ShamanBuffTrackerOptions.moveBtn:SetChecked(false)
+        if ShamanTrackerScaleSlider then ShamanTrackerScaleSlider:SetValue(1.0) end
+        if ShamanBuffTrackerOptions and ShamanBuffTrackerOptions.moveBtn then 
+            ShamanBuffTrackerOptions.moveBtn:SetChecked(false) 
+        end
         ShamanSelfCheckFrame.moveOverlay:Hide()
         
         print("|cff00ff00Shaman Tracker: Reset to default successful.|r")
@@ -63,7 +64,7 @@ moveOverlay:SetAllPoints()
 moveOverlay:SetFrameLevel(frame:GetFrameLevel() + 10)
 moveOverlay:SetBackdrop({ edgeFile = "Interface\\Buttons\\UI-SliderBar-Border", edgeSize = 12 })
 moveOverlay:Hide()
-frame.moveOverlay = moveOverlay -- Store reference for reset
+frame.moveOverlay = moveOverlay 
 
 local moveText = moveOverlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 moveText:SetPoint("CENTER", 0, 0)
@@ -81,7 +82,7 @@ end)
 -- Options
 local options = CreateFrame("Frame", "ShamanBuffTrackerOptions", InterfaceOptionsFramePanelContainer)
 options.name = "Shaman Buff Tracker"
-ShamanBuffTrackerOptions = options -- Store reference for the popup logic
+ShamanBuffTrackerOptions = options 
 
 local title = options:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 title:SetPoint("TOPLEFT", 16, -16)
@@ -92,8 +93,14 @@ moveBtn:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -15)
 moveBtn.Text:SetText("|cffffff00Enable Move Mode|r")
 options.moveBtn = moveBtn
 moveBtn:SetScript("OnClick", function(self)
-    if self:GetChecked() then moveOverlay:Show() frame:Show() text:SetText("")
-    else moveOverlay:Hide() frame:UpdateStatus() end
+    if self:GetChecked() then 
+        moveOverlay:Show() 
+        frame:Show() 
+        text:SetText("")
+    else 
+        moveOverlay:Hide() 
+        frame:UpdateStatus() 
+    end
 end)
 
 local function CreateOptionCheckbox(label, dbKey, relativeTo, yOffset)
@@ -141,7 +148,7 @@ scaleSlider:SetScript("OnValueChanged", function(self, value)
     frame:SetScale(value)
 end)
 
--- Reset to Defaults
+-- RESET BUTTON
 local resetBtn = CreateFrame("Button", nil, options, "UIPanelButtonTemplate")
 resetBtn:SetSize(120, 25)
 resetBtn:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", -10, -30)
@@ -157,43 +164,54 @@ else
     InterfaceOptions_AddCategory(options)
 end
 
+-- TAINT-SAFE LOGIC HELPERS
 local function GetIconString(id)
     local texture = type(id) == "number" and (C_Spell.GetSpellTexture(id) or id) or id
     return "|T" .. texture .. ":16:16:0:0|t "
 end
 
+local function PlayerHasAura(spellName, spellID)
+    if C_UnitAuras.GetPlayerAuraBySpellID(spellID) then return true end
+    if spellName == "Lightning Shield" and C_UnitAuras.GetPlayerAuraBySpellID(192109) then return true end
+    if AuraUtil.FindAuraByName(spellName, "player") then return true end
+    return false
+end
+
 function frame:UpdateStatus()
     if moveOverlay:IsShown() then return end
+    
+    -- THIS IS WHY IT HIDES IN COMBAT:
+    if InCombatLockdown() then 
+        frame:Hide() 
+        return 
+    end
+
     local _, class = UnitClass("player")
-    -- Shaman Class only
-    if class ~= "SHAMAN" or UnitIsDeadOrGhost("player") then frame:Hide() return end
+    if class ~= "SHAMAN" or UnitIsDeadOrGhost("player") then 
+        frame:Hide() 
+        return 
+    end
 
     local missing = {}
     local hasMH, _, _, _, hasOH = GetWeaponEnchantInfo()
     
-    -- Weapon Imbues
-    if ShamanBuffTrackerDB.trackMainHand and not hasMH then table.insert(missing, "|T132314:16:16:0:0|t Main-Hand Imbue") end
-    if ShamanBuffTrackerDB.isEnhancement and not hasOH then table.insert(missing, "|T237581:16:16:0:0|t Off-Hand Imbue") end
+    if ShamanBuffTrackerDB.trackMainHand and not hasMH then table.insert(missing, "|T132314:16:16:0:0|t Main-hand imbue") end
+    if ShamanBuffTrackerDB.isEnhancement and not hasOH then table.insert(missing, "|T237581:16:16:0:0|t Off-hand imbue") end
 
-    -- Lightning Shield
     if ShamanBuffTrackerDB.trackLightningShield then
-        if not C_UnitAuras.GetPlayerAuraBySpellID(192106) and not AuraUtil.FindAuraByName("Lightning Shield", "player") then
+        if not PlayerHasAura("Lightning Shield", 192106) then
             table.insert(missing, GetIconString(192106) .. "Lightning Shield")
         end
     end
 
-    -- Earth Shield
     if ShamanBuffTrackerDB.trackEarthShield then
-        local hasES = C_UnitAuras.GetPlayerAuraBySpellID(974) or AuraUtil.FindAuraByName("Earth Shield", "player")
-        
-        if not hasES then
+        if not PlayerHasAura("Earth Shield", 974) then
             table.insert(missing, GetIconString(974) .. "Earth Shield")
         end
     end
 
-    -- Skyfury
     if ShamanBuffTrackerDB.trackSkyfury then
-        if not (C_UnitAuras.GetPlayerAuraBySpellID(375986) or C_UnitAuras.GetPlayerAuraBySpellID(462854) or AuraUtil.FindAuraByName("Skyfury", "player")) then
+        if not (PlayerHasAura("Skyfury", 375986) or PlayerHasAura("Skyfury", 462854)) then
             table.insert(missing, GetIconString(462854) .. "Skyfury")
         end
     end
@@ -212,6 +230,17 @@ frame:RegisterUnitEvent("UNIT_AURA", "player")
 frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("ADDON_LOADED")
+frame:RegisterEvent("PLAYER_REGEN_DISABLED") 
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")  
+
+local lastUpdate = 0
+frame:SetScript("OnUpdate", function(self, elapsed)
+    lastUpdate = lastUpdate + elapsed
+    if lastUpdate > 0.5 then
+        self:UpdateStatus()
+        lastUpdate = 0
+    end
+end)
 
 frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "ShamanBuffTracker" then
