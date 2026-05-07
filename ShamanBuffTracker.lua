@@ -6,13 +6,14 @@ ShamanBuffTrackerDB = ShamanBuffTrackerDB or {
     trackLightningShield = true,
     trackEarthShield = false,
     trackRested = true,
+    relaxedMode = false,
     frameScale = 1.0,
     posX = 0,
     posY = -50,
     point = "TOP"
 }
 
---  Reset 
+-- Reset 
 StaticPopupDialogs["SHAMAN_TRACKER_CONFIRM_RESET"] = {
     text = "Are you sure you want to reset the Shaman Buff Tracker to default position and scale?",
     button1 = "Yes",
@@ -23,6 +24,7 @@ StaticPopupDialogs["SHAMAN_TRACKER_CONFIRM_RESET"] = {
         ShamanBuffTrackerDB.point = "TOP"
         ShamanBuffTrackerDB.frameScale = 1.0
         ShamanBuffTrackerDB.trackRested = true
+        ShamanBuffTrackerDB.relaxedMode = false
         ShamanSelfCheckFrame:ClearAllPoints()
         ShamanSelfCheckFrame:SetPoint("TOP", UIParent, "TOP", 0, -50)
         ShamanSelfCheckFrame:SetScale(1.0)
@@ -53,7 +55,7 @@ local text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 text:SetPoint("CENTER", 0, 0)
 text:SetTextColor(1, 0.82, 0)
 
--- Moving Frame
+-- Moving Frame Overlay
 local moveOverlay = CreateFrame("Frame", nil, frame, "BackdropTemplate")
 moveOverlay:SetAllPoints()
 moveOverlay:SetFrameLevel(frame:GetFrameLevel() + 10)
@@ -74,7 +76,7 @@ moveOverlay:SetScript("OnDragStop", function()
     ShamanBuffTrackerDB.point, ShamanBuffTrackerDB.posX, ShamanBuffTrackerDB.posY = point, x, y
 end)
 
--- Options
+-- Options Panel
 local options = CreateFrame("Frame", "ShamanBuffTrackerOptions", InterfaceOptionsFramePanelContainer)
 options.name = "Shaman Buff Tracker"
 ShamanBuffTrackerOptions = options 
@@ -88,8 +90,16 @@ moveBtn:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -15)
 moveBtn.Text:SetText("|cffffff00Enable Move Mode|r")
 options.moveBtn = moveBtn
 moveBtn:SetScript("OnClick", function(self)
-    if self:GetChecked() then moveOverlay:Show() frame:Show() text:SetText("")
-    else moveOverlay:Hide() frame:UpdateStatus() end
+    if self:GetChecked() then 
+        moveOverlay:Show() 
+        frame:Show() 
+        -- Standardize size for moving so the "DRAG" text is readable
+        frame:SetSize(200, 40)
+        text:SetText("")
+    else 
+        moveOverlay:Hide() 
+        frame:UpdateStatus() 
+    end
 end)
 
 local function CreateOptionCheckbox(label, dbKey, relativeTo, yOffset)
@@ -109,9 +119,10 @@ local skyCB = CreateOptionCheckbox("Track Skyfury", "trackSkyfury", mhCB, -10)
 local lsCB  = CreateOptionCheckbox("Track Lightning Shield", "trackLightningShield", skyCB, -10)
 local esCB  = CreateOptionCheckbox("Track Earth Shield", "trackEarthShield", lsCB, -10)
 local restCB = CreateOptionCheckbox("Disable Alerts in Rested Areas (Cities)", "trackRested", esCB, -10)
+local relaxedCB = CreateOptionCheckbox("Relaxed Mode (Classic Shaman Icon Only)", "relaxedMode", restCB, -10)
 
 local scaleSlider = CreateFrame("Slider", "ShamanTrackerScaleSlider", options, "BackdropTemplate")
-scaleSlider:SetPoint("TOPLEFT", restCB, "BOTTOMLEFT", 20, -40)
+scaleSlider:SetPoint("TOPLEFT", relaxedCB, "BOTTOMLEFT", 20, -40)
 scaleSlider:SetSize(180, 15)
 scaleSlider:SetOrientation("HORIZONTAL")
 scaleSlider:SetMinMaxValues(0.5, 2.0)
@@ -163,6 +174,7 @@ end
 local resTimer = 0
 
 function frame:UpdateStatus()
+    -- Movement mode override
     if moveOverlay:IsShown() then return end
     
     local _, class = UnitClass("player")
@@ -171,26 +183,25 @@ function frame:UpdateStatus()
         return 
     end
 
-    -- Check Rested Area
+    -- Strict Combat Lockdown
+    if InCombatLockdown() then
+        frame:Hide()
+        return
+    end
+
+    -- Rested Check
     if ShamanBuffTrackerDB.trackRested and IsResting() then
         frame:Hide()
         return
     end
 
-    -- Combat Disable
-    if InCombatLockdown() and resTimer <= 0 then
-        frame:Hide()
-        return
-    end
-
-    -- Instance Check
+    -- Instance & Preparation Check
     local inInstance, instanceType = IsInInstance()
     if inInstance then
         if instanceType == "party" and C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive() then
             frame:Hide()
             return
         end
-
         if (instanceType == "pvp" or instanceType == "arena") then
             if not (PlayerHasBuff("Preparation") or PlayerHasBuff("Arena Preparation")) then
                 frame:Hide()
@@ -228,8 +239,15 @@ function frame:UpdateStatus()
     end
 
     if #missing > 0 then
-        text:SetText("MISSING: " .. table.concat(missing, "  "))
-        frame:SetWidth(text:GetStringWidth() + 50)
+        if ShamanBuffTrackerDB.relaxedMode then
+            -- Use Classic Shaman Icon: 626006 / classicon-shaman
+            frame:SetSize(40, 40)
+            text:SetText("|T626006:28:28:0:0|t")
+        else
+            text:SetText("MISSING: " .. table.concat(missing, "  "))
+            frame:SetWidth(text:GetStringWidth() + 50)
+            frame:SetHeight(40)
+        end
         frame:Show()
     else 
         frame:Hide() 
@@ -245,7 +263,7 @@ frame:RegisterEvent("PLAYER_UNGHOST")
 frame:RegisterEvent("PLAYER_ALIVE")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
 frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:RegisterEvent("PLAYER_UPDATE_RESTING") -- Watch for entering/leaving cities
+frame:RegisterEvent("PLAYER_UPDATE_RESTING")
 
 local lastUpdate = 0
 frame:SetScript("OnUpdate", function(self, elapsed)
@@ -253,7 +271,6 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     if resTimer > 0 then
         resTimer = resTimer - elapsed
     end
-
     if lastUpdate > 0.5 then
         self:UpdateStatus()
         lastUpdate = 0
@@ -275,6 +292,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         lsCB:SetChecked(ShamanBuffTrackerDB.trackLightningShield)
         esCB:SetChecked(ShamanBuffTrackerDB.trackEarthShield)
         restCB:SetChecked(ShamanBuffTrackerDB.trackRested)
+        relaxedCB:SetChecked(ShamanBuffTrackerDB.relaxedMode)
     elseif event == "PLAYER_UNGHOST" or event == "PLAYER_ALIVE" then
         resTimer = 20
     end
