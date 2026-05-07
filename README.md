@@ -6,6 +6,9 @@ An addon that alerts the user when tracked shaman buffs are not active. This hel
 
 
 ## Changelog
+1.2.0 
+    - Disabled alerting during all combat to fix bugs.
+    - Added Relaxed mode, this condenses the list into a single icon alert to clear UI of clutter.
 1.1.0 
     - Bug fixes where incorrect warnrings whould pop during combat, specifcally instanced combat (raid, mythics, pvp).
     - Added feature to toggle off warnings in rested areas.
